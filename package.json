@@ -5,5 +5,8 @@
   "main": "index.js",
   "repository": "git@github:ron-dadon/sqeasy.git",
   "author": "Ron Dadon",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "2.841.0"
+  }
 }
