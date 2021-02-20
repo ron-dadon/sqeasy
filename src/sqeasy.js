@@ -122,7 +122,6 @@ function sqeasy(sqs) {
   return {
     use,
     match,
-    handleMessage,
     start,
     stop,
     subscribe
