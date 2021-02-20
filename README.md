@@ -1,7 +1,8 @@
 # sqeasy
-AWS SQS made easy
 
 ![Tests](https://github.com/ron-dadon/sqeasy/actions/workflows/main.yml/badge.svg)
+
+AWS SQS made easy, inspired by express.
 
 ## Installation
 
