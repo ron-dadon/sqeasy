@@ -1,4 +1,5 @@
 const pipeline = require('./pipeline.js')
+const { isFunction, secondsToMilliseconds } = require('./utils.js')
 
 const DEFAULT_WAIT_TIME = 10
 const DEFAULT_BATCH_SIZE = 1
@@ -10,7 +11,7 @@ function sqeasy(sqs) {
   const subscription = {
     queueUrl: null,
     batchSize: DEFAULT_BATCH_SIZE,
-    waitTime: DEFAULT_WAIT_TIME,
+    waitTime: secondsToMilliseconds(DEFAULT_WAIT_TIME),
     timeoutHandler: null,
     attributes: [],
     toSQSParams: function() {
@@ -26,11 +27,13 @@ function sqeasy(sqs) {
 
   function use(...fns) {
     if (running) throw new Error('Cannot add middlewares while Sqeasy is running')
+    if (!fns.every(isFunction)) throw new Error('use can only accept functions as arguments')
     middlewares.use(...fns)
   }
 
   function match(matcher, ...fns) {
-    if (typeof matcher !== 'function') throw new Error('Matcher must be a function')
+    if (!isFunction(matcher)) throw new Error('Matcher must be a function')
+    if (!fns.every(isFunction)) throw new Error('matcher can only accept functions as arguments')
     if (running) throw new Error('Cannot add matchers while Sqeasy is running')
     middlewares.use(async (msg, next) => {
       if (matcher(msg)) {
@@ -51,20 +54,26 @@ function sqeasy(sqs) {
     if (attributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Attributes array can contain only strings')
     subscription.queueUrl = queueUrl
     subscription.batchSize = batchSize
-    subscription.waitTime = waitTime
+    subscription.waitTime = secondsToMilliseconds(waitTime)
     subscription.attributes = attributes || []
   }
 
   async function fetchMessages() {
     const { Messages: messages } = await sqs.receiveMessage(subscription.toSQSParams()).promise()
-    if (messages && messages.length) {
+    const haveMessages = !!(messages && messages.length)
+    let startTime
+    if (haveMessages) {
       if (subscription.batchSize > 1) {
+        startTime = Date.now()
         await handleMessages(messages)
       } else {
+        startTime = Date.now()
         await handleMessage(...messages)
       }
     }
-    subscription.timeoutHandler = setTimeout(fetchMessages, subscription.waitTime * 1000)
+    const passedDuration = Date.now() - startTime
+    const nextPullIn = haveMessages ? Math.max(0, subscription.waitTime - passedDuration) : subscription.waitTime
+    subscription.timeoutHandler = setTimeout(fetchMessages, nextPullIn)
   }
 
   function start() {
@@ -83,8 +92,8 @@ function sqeasy(sqs) {
   }
 
   async function handleMessage(message) {
+    await middlewares.execute(message)
     try {
-      await middlewares.execute(message)
       await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: message.ReceiptHandle }).promise()
     } catch (e) {
       console.error('Error deleting SQS message', e)
@@ -96,8 +105,8 @@ function sqeasy(sqs) {
   }
 
   async function handleMessages(messages) {
+    await Promise.all(messages.map(middlewares.execute))
     try {
-      await Promise.all(messages.map(middlewares.execute))
       await sqs.deleteMessageBatch({ QueueUrl: subscription.queueUrl, Entries: messages.map(messageToEntry) }).promise()
     } catch (e) {
       console.error('Error deleting SQS message', e)
