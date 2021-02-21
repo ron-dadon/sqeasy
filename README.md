@@ -1,7 +1,6 @@
 # sqeasy
 
 ![Tests](https://github.com/ron-dadon/sqeasy/actions/workflows/main.yml/badge.svg)
-[![GitHub release](https://img.shields.io/github/release/Naereen/StrapDown.js.svg)](https://github.com/ron-dadon/sqeasy/releases/)
 
 AWS SQS made easy, inspired by express middleware pattern.
 
