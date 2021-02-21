@@ -30,14 +30,12 @@ function sqeasy(sqs) {
   }
 
   function match(matcher, ...fns) {
+    if (typeof matcher !== 'function') throw new Error('Matcher must be a function')
     if (running) throw new Error('Cannot add matchers while Sqeasy is running')
-    middlewares.use(async (ctx, next) => {
-      if (
-        (typeof matcher === 'function' && matcher(ctx)) ||
-        (typeof matcher === 'object' && matchAttributes(matcher, ctx.MessageAttributes))
-      ) {
+    middlewares.use(async (msg, next) => {
+      if (matcher(msg)) {
         const subMiddlewares = pipeline(...fns)
-        await subMiddlewares.execute(ctx)
+        await subMiddlewares.execute(msg)
       }
       next()
     })
@@ -49,6 +47,7 @@ function sqeasy(sqs) {
     if (batchSize < 1 || batchSize > 10) throw new Error('Batch size must be between 1 and 10')
     if (!Number.isInteger(waitTime)) throw new Error('Wait time must be an integer')
     if (!Array.isArray(attributes)) throw new Error('Attributes must be an array')
+    if (waitTime < 0) throw new Error('Wait time most be 0 or higher')
     if (attributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Attributes array can contain only strings')
     subscription.queueUrl = queueUrl
     subscription.batchSize = batchSize
@@ -69,6 +68,7 @@ function sqeasy(sqs) {
   }
 
   function start() {
+    if (!subscription.queueUrl) throw new Error('Cannot start without subscribing to a queue')
     running = true
     console.log('Start pulling')
     fetchMessages()
@@ -87,7 +87,7 @@ function sqeasy(sqs) {
       await middlewares.execute(message)
       await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: message.ReceiptHandle }).promise()
     } catch (e) {
-      console.log('Error delete', e)
+      console.error('Error deleting SQS message', e)
     }
   }
 
@@ -100,23 +100,8 @@ function sqeasy(sqs) {
       await Promise.all(messages.map(middlewares.execute))
       await sqs.deleteMessageBatch({ QueueUrl: subscription.queueUrl, Entries: messages.map(messageToEntry) }).promise()
     } catch (e) {
-      console.log('Error delete', e)
+      console.error('Error deleting SQS message', e)
     }
-  }
-
-  function matchAttributes(matcher, messageAttributes) {
-    for (const key in matcher) {
-      if (!matcher.hasOwnProperty(key)) continue
-      const currentAttribute = messageAttributes[key]
-      const currentMatcher = matcher[key]
-      if (typeof currentMatcher === 'string' && currentMatcher !== currentAttribute) return false
-      if (Array.isArray(currentMatcher) && !currentMatcher.includes(currentAttribute)) return false
-      if (typeof currentMatcher === 'object') {
-        if (typeof currentMatcher.anythingBut === 'string' && currentMatcher.anythingBut === currentAttribute) return false
-        if (Array.isArray(currentMatcher.anythingBut) && currentMatcher.anythingBut.includes(currentAttribute)) return false
-      }
-    }
-    return true
   }
 
   return {
