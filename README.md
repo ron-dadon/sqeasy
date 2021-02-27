@@ -1,6 +1,6 @@
 # sqeasy
 
-![Tests](https://github.com/ron-dadon/sqeasy/actions/workflows/main.yml/badge.svg)
+![Unit Tests](https://github.com/ron-dadon/sqeasy/actions/workflows/main.yml/badge.svg)
 
 AWS SQS made easy, inspired by express middleware pattern.
 
@@ -16,17 +16,21 @@ yarn add sqeasy
 npm install sqeasy
 ```
 
+## What is Sqeasy?
+
+As micro-services becoming more and more popular every day and distributed systems evolve, messaging as a way of communication is taking over. One of AWS solutions for a queue system is [SQS](https://aws.amazon.com/sqs/) (Simple Queue Service). In order to consume SQS messages, the consuming service need to manually pull the queue for new messages. There are already some modules that solves this part, providing auto-pulling, such as [sqs-consumer](https://github.com/BBC/sqs-consumer).
+
+Sqeasy takes it one step further, providing a simple-to-use library that provides both auto-pulling and [express](https://github.com/expressjs/express) inspired style middleware system, allowing you to build a full processing chain with ease.
+
 ## How it works?
 
 Sqeasy is pulling SQS queue in a defined interval (`waitTime` seconds) and executes a middlewares pipeline for every incoming message.
 
 If the incoming message was processed successfully, Sqeasy will automatically delete it from the queue, otherwise, it will not, and the message will become visible again.
 
-You can set up "global" (runs for every message) middlewares using the `use` function, passing 1 or more middleware functions to it. Middleware functions takes 2 arguments: the incoming SQS message and a `next` function. When your middleware ends and you want to tell Sqeasy to move forward to the next middleware, you call the `next` function from your middleware.
+Sqeasy middlewares runs sequentially, and you can define middlewares using the `use` method. A unique middleware setup is the `match` function, which behaves like the `use` function but takes a matcher function as the first argument. When an incoming message arrives to the match middleware, it will execute the matcher function, passing the incoming message into it, and will only process the following middlewares that were provided in the `match` call if the matcher function will return `true`. A common use case is to run different pipelines according to the incoming message attributes.
 
-You can set up a middleware that will execute only if a certain condition matches by using the `match` function. The `match` function takes 2+ arguments, the first one is the `matcher` function that is executed with the incoming SQS message, and all others are middleware functions that will execute if and only if the `matcher` function returns a truthy value.
-
-To handle errors, you can set up error middlewares. Those should be defined last, and takes 3 arguments: the error, the incoming message and `next` function.  
+Error handling is done by using the error middleware. An error middleware is a middleware that takes in 3 arguments: the error, the incoming message and the `next` function. When a middleware throws an error / returns a promise that is rejected / calls `next` with a parameter, Sqeasy will move into error mode and will only execute the following middlewares that are used for error handling (detected by the amount of parameters the middleware takes).
 
 ## Example
 
