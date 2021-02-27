@@ -1,3 +1,9 @@
+# JetBrains
+.idea
+
+# Demo
+demo.js
+
 # Logs
 logs
 *.log
