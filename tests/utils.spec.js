@@ -1,4 +1,4 @@
-const { isFunction, secondsToMilliseconds, isErrorHandlingMiddleware } = require('../src/utils.js')
+const { isFunction, secondsToMilliseconds, isErrorHandlingMiddleware, messageToContext } = require('../src/utils.js')
 
 describe('isFunction', function() {
   it('should return true if argument is a function', function() {
@@ -26,5 +26,14 @@ describe('isErrorHandlingMiddleware', function() {
     expect(isErrorHandlingMiddleware(function(a, b) {})).toBeFalsy()
     expect(isErrorHandlingMiddleware(function(a) {})).toBeFalsy()
     expect(isErrorHandlingMiddleware(function() {})).toBeFalsy()
+  })
+})
+
+describe('messageToContext', function() {
+  it('should return an object with message property', function() {
+    const message = { test: 1 }
+    const context = messageToContext(message)
+    expect(context).toEqual({ message })
+    expect(context.message).toBe(message)
   })
 })

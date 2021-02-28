@@ -1,4 +1,5 @@
 const pipeline = require('./pipeline.js')
+const { messageToContext } = require('./utils.js');
 const { isFunction, secondsToMilliseconds } = require('./utils.js')
 
 const DEFAULT_WAIT_TIME = 10
@@ -92,9 +93,10 @@ function sqeasy(sqs) {
   }
 
   async function handleMessage(message) {
-    await middlewares.execute(message)
+    const receiptHandle = message.ReceiptHandle
+    await middlewares.execute(messageToContext(message))
     try {
-      await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: message.ReceiptHandle }).promise()
+      await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: receiptHandle }).promise()
     } catch (e) {
       console.error('Error deleting SQS message', e)
     }
@@ -105,9 +107,10 @@ function sqeasy(sqs) {
   }
 
   async function handleMessages(messages) {
-    await Promise.all(messages.map(middlewares.execute))
+    const entries = messages.map(messageToEntry)
+    await Promise.all(messages.map(messageToContext).map(middlewares.execute))
     try {
-      await sqs.deleteMessageBatch({ QueueUrl: subscription.queueUrl, Entries: messages.map(messageToEntry) }).promise()
+      await sqs.deleteMessageBatch({ QueueUrl: subscription.queueUrl, Entries: entries }).promise()
     } catch (e) {
       console.error('Error deleting SQS message', e)
     }
