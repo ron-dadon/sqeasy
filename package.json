@@ -6,8 +6,8 @@
   "repository": "git@github:ron-dadon/sqeasy.git",
   "author": "Ron Dadon",
   "license": "MIT",
-  "dependencies": {
-    "aws-sdk": "2.841.0"
+  "peerDependencies": {
+    "aws-sdk": ">=2.x"
   },
   "devDependencies": {
     "jest": "26.6.3"
