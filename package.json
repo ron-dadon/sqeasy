@@ -1,6 +1,6 @@
 {
   "name": "sqeasy",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "AWS SQS made easy",
   "main": "src/sqeasy.js",
   "repository": "https://github.com/ron-dadon/sqeasy",
