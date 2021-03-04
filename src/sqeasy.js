@@ -8,11 +8,14 @@ const {
 } = require('./utils.js')
 
 const DEFAULT_WAIT_TIME = 10
-const DEFAULT_BATCH_SIZE = 1
+const DEFAULT_BATCH_SIZE = 10
 
 const EMPTY_LOGGER = { log: nop, error: nop }
 
 function sqeasy(sqs) {
+  // Primitive way of confirming sqs exists and is the actual AWS SQS instance
+  if (!sqs || !sqs.api || sqs.api.serviceId !== 'SQS') throw new Error('Sqeasy must be initialized with a valid AWS SQS instance')
+
   const middlewares = pipeline()
   let running = false
   let _logger = EMPTY_LOGGER
@@ -59,25 +62,6 @@ function sqeasy(sqs) {
     })
   }
 
-  function subscribe({ queueUrl, batchSize = DEFAULT_BATCH_SIZE, waitTime = DEFAULT_WAIT_TIME, attributes = [], messageAttributes = [] }) {
-    if (running) throw new Error('Cannot change subscription while running')
-    if (!Number.isInteger(batchSize)) throw new Error('Batch size must be an integer')
-    if (batchSize < 1 || batchSize > 10) throw new Error('Batch size must be between 1 and 10')
-    if (!Number.isInteger(waitTime)) throw new Error('Wait time must be an integer')
-    if (!Array.isArray(attributes)) throw new Error('Attributes must be an array')
-    if (!Array.isArray(messageAttributes)) throw new Error('Message attributes must be an array')
-    if (waitTime < 0) throw new Error('Wait time most be 0 or higher')
-    if (attributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Attributes array can contain only strings')
-    if (messageAttributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Message attributes array can contain only strings')
-    subscription.queueUrl = queueUrl
-    subscription.batchSize = batchSize
-    subscription.waitTime = waitTime
-    subscription.waitTimeMs = secondsToMilliseconds(waitTime)
-    subscription.attributes = attributes || []
-    subscription.messageAttributes = messageAttributes || []
-    _logger.log(`Subscribed to ${queueUrl} with parameters: ${subscription.logParameters()}`)
-  }
-
   async function fetchMessages() {
     let messages
     try {
@@ -108,10 +92,25 @@ function sqeasy(sqs) {
     subscription.timeoutHandler = setTimeout(fetchMessages, nextPullIn)
   }
 
-  function start() {
-    if (!subscription.queueUrl) throw new Error('Cannot start without subscribing to a queue')
+  function pull({ queueUrl, batchSize = DEFAULT_BATCH_SIZE, waitTime = DEFAULT_WAIT_TIME, attributes = [], messageAttributes = [] }) {
+    if (running) throw new Error('Must stop pulling before calling pull again')
+    if (!queueUrl) throw new Error('Queue URL is required')
+    if (!Number.isInteger(batchSize)) throw new Error('Batch size must be an integer')
+    if (batchSize < 1 || batchSize > 10) throw new Error('Batch size must be between 1 and 10')
+    if (!Number.isInteger(waitTime)) throw new Error('Wait time must be an integer')
+    if (!Array.isArray(attributes)) throw new Error('Attributes must be an array')
+    if (!Array.isArray(messageAttributes)) throw new Error('Message attributes must be an array')
+    if (waitTime < 0) throw new Error('Wait time most be 0 or higher')
+    if (attributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Attributes array can contain only strings')
+    if (messageAttributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Message attributes array can contain only strings')
+    subscription.queueUrl = queueUrl
+    subscription.batchSize = batchSize
+    subscription.waitTime = waitTime
+    subscription.waitTimeMs = secondsToMilliseconds(waitTime)
+    subscription.attributes = attributes || []
+    subscription.messageAttributes = messageAttributes || []
     running = true
-    _logger.log('Start pulling')
+    _logger.log(`Start pulling ${queueUrl} with parameters: ${subscription.logParameters()}`)
     fetchMessages()
   }
 
@@ -169,9 +168,8 @@ function sqeasy(sqs) {
   return {
     use,
     match,
-    start,
+    pull,
     stop,
-    subscribe,
     setLogger
   }
 }

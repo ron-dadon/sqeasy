@@ -22,16 +22,6 @@ As micro-services becoming more and more popular every day and distributed syste
 
 Sqeasy takes it one step further, providing a simple-to-use library that provides both auto-pulling and [express](https://github.com/expressjs/express) inspired style middleware system, allowing you to build a full processing chain with ease.
 
-## How it works?
-
-Sqeasy is pulling SQS queue in a defined interval (`waitTime` seconds) and executes a middlewares pipeline for every incoming message.
-
-If the incoming message was processed successfully, Sqeasy will automatically delete it from the queue, otherwise, it will not, and the message will become visible again.
-
-Sqeasy middlewares runs sequentially, and you can define middlewares using the `use` method. A unique middleware setup is the `match` function, which behaves like the `use` function but takes a matcher function as the first argument. When an incoming message arrives to the match middleware, it will execute the matcher function, passing the incoming message into it, and will only process the following middlewares that were provided in the `match` call if the matcher function will return `true`. A common use case is to run different pipelines according to the incoming message attributes.
-
-Error handling is done by using the error middleware. An error middleware is a middleware that takes in 3 arguments: the error, the incoming message and the `next` function. When a middleware throws an error / returns a promise that is rejected / calls `next` with a parameter, Sqeasy will move into error mode and will only execute the following middlewares that are used for error handling (detected by the amount of parameters the middleware takes).
-
 ## Example
 
 ```js
@@ -49,34 +39,31 @@ const app = sqeasy(sqs)
 // Generate a matcher function that returns true
 // if a message attribute 'attr' matches the value 'value'
 function matchKeyAttribute(attr, value) {
-  return function(msg) {
-    return msg.MessageAttributes[attr].Value === value 
+  return function({ message }) {
+    return message.MessageAttributes[attr].Value === value 
   }
 }
 
 // Print the incoming message body
-function printMessage(msg, next) {
-  console.log('Message:', msg.Body)
+function printMessage({ message }, next) {
+  console.log('Message:', message.Body)
   next()
 }
 
 // Print the incoming message attributes
-function printMessageAttributes(msg, next) {
-  console.log('Message Attributes:', msg.MessageAttributes)
+function printMessageAttributes({ message }, next) {
+  console.log('Message Attributes:', message.MessageAttributes)
   next()
 }
 
 // Handle errors
-function handleError(err, msg, next) {
+function handleError(err, { message }, next) {
   if (!err) {
-    console.log('Done with message:', msg)
+    console.log('Done with message:', message)
     return next()
   }
   console.error(err)
 }
-
-// Subscribe to a specific queue
-app.subscribe({ queueUrl: QUEUE_URL, batchSize: 10, waitTime: 10 })
 
 // General pre match middleware
 app.use(printMessage)
@@ -88,5 +75,93 @@ app.match(matchKeyAttribute('test', 'test'), printMessageAttributes)
 // Handle errors
 app.use(handleError)
 
-app.start()
+app.pull({ queueUrl: QUEUE_URL, batchSize: 10, waitTime: 10 })
 ```
+## API
+
+### sqeasy
+
+Sqeasy module exports one factory method that generates a Sqeasy app. Each app must get an AWS SQS instance object. Sqeasy keeps AWS SQS out of the module since in most cases AWS is already used in other parts of the app / service, so it allows the developer to re-use existing instances instead of creating one internally.
+
+```js
+const sqeasy = require('sqeasy')
+const aws = require('aws-sdk')
+
+const sqs = new aws.SQS({ region: 'us-east-1' })
+
+const app = sqeasy(sqs)
+```
+
+### App methods
+
+#### use
+
+Method signature: `use(...fns)`
+
+The `use` method is used to set up a middleware(s) in the execution chain.
+The method can only accept functions (1...n).
+Each middleware function is execute with 2 parameters: `context` and `next`.
+
+The `context` parameter contain the execution context. When Sqeasy starts an execution chain for an incoming SQS message, the `context` object contains `message` property that hold the incoming SQS message. The context object is mutable, allowing every middleware in the chain to change its content.
+
+The `next` parameter is a function that needs to be called when the middleware is done and ready to move forward to the next middleware in the chain. No calling the `next` function will result in a "dead" execution chain that will stop processing. If the `next` function is called with a parameter, it is treated as an error, and will skip all the next middlewares until it reaches the error handling middlewares.
+
+```js
+function validateMessage({ message }, next) {
+  if (message.Body !== 'test') return next('Invalid body')
+  next()
+}
+
+function printMessage({ message }, next) {
+  console.log(message)
+  next()
+}
+
+// Equivilant to app.use(validateMessage, printMessage)
+app.use(validateMessage)
+app.use(printMessage)
+```
+
+#### match
+
+Method signature: `match(matcher, ...fns)`
+
+The `match` method is a special middleware that is used to create a "sub" execution chain. This method accepts only functions (1...n), with the first parameter being a special "matcher" function.
+
+A matcher function is a function that only gets one argument, the `context` argument. The function can implement any matching algorithm, and if the function returns `true`, then any other function that is provided to the `match` method will be executed as part of the execution chain. If the function returns `false`, Sqeasy will skip all the rest of the functions that were passed to the `match` method and will move to the next middleware.
+
+```js
+function matchBody({ message }) {
+  return message.Body === 'test'
+}
+
+function printMessage({ message }, next) {
+  console.log(message)
+  next()
+}
+
+// Will only execute `printMessage` if the message body is 'test'
+app.match(matchBody, printMessage)
+```
+
+#### pull
+
+Method signature: `({ queueUrl, batchSize?, waitTime?, attributes?, messageAttributes? })`
+
+Start pulling SQS queue according to the provided arguments.
+
+`queueUrl`: The URL of the SQS queue to pull from.
+
+`batchSize`: The number of message to pull every time. Possible values: `1` - `10`. Default value `10`.
+
+`waitTime`: The number of seconds to wait between pulls. This affects also the message invisibility time. Value must be greater than `0`. Default value `10`.
+
+`attributes`: The list of attributes to pull with each message. Must be an array with the attribute names. See AWS docs for possible values.
+
+`messageAttributes`: The list of message attributes to pull with each message. Must be an array with the message attribute names. See AWS docs for possible values.
+
+#### stop
+
+Method signature: `()`
+
+Stops the SQS pulling. If there are any messages still in processing, they will not stop processing.
