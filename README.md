@@ -36,7 +36,7 @@ const QUEUE_URL = 'http://example.com'
 const sqs = new aws.SQS({ region: 'us-east-1' })
 
 // Create app instance for that sqs
-const app = sqeasy(sqs)
+const app = sqeasy({ sqs })
 
 // Generate a matcher function that returns true
 // if a message attribute 'attr' matches the value 'value'
@@ -91,7 +91,7 @@ const aws = require('aws-sdk')
 
 const sqs = new aws.SQS({ region: 'us-east-1' })
 
-const app = sqeasy(sqs)
+const app = sqeasy({ sqs })
 ```
 
 ### App methods
