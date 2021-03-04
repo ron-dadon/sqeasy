@@ -7,6 +7,7 @@ function pipeline(...fns) {
 
   async function execute(context) {
     let error = false
+    let errorResult
     let fns = [...functions.filter(fn => fn.length === 2)].reverse()
     const errHandlers = functions.filter(fn => fn.length === 3).reverse()
 
@@ -16,7 +17,7 @@ function pipeline(...fns) {
         fns = errHandlers
       }
       if (!fns.length) {
-        if (err) throw err
+        if (err) errorResult = err
         return
       }
       if (error && !err) {
@@ -25,16 +26,18 @@ function pipeline(...fns) {
       const fn = fns.pop()
       try {
         if (error) {
-          await fn(err, context, next)
+          return await fn(err, context, next)
         } else {
-          await fn(context, next)
+          return await fn(context, next)
         }
       } catch (e) {
-        await next(e)
+        return await next(e)
       }
     }
-
-    return await next()
+    await next()
+    if (error && errorResult) {
+      throw errorResult
+    }
   }
 
   return {

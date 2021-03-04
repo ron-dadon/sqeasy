@@ -29,7 +29,7 @@ describe('Pipeline', function() {
     jest.clearAllMocks()
   })
 
-  it('should create an empty pipeline', async function() {
+  it('should create an empty pipeline',  function() {
     const p = pipeline()
     expect(p).toHaveProperty('use')
     expect(p).toHaveProperty('execute')
@@ -37,13 +37,13 @@ describe('Pipeline', function() {
 
   it('should create a pipeline with middleware and run it on execute', async function() {
     const p = pipeline(mw1)
-    await p.execute({})
+    await expect(p.execute({})).resolves.toBeUndefined()
     expect(mw1).toHaveBeenCalledTimes(1)
   })
 
   it('should create a pipeline with multiple middlewares and run them on execute', async function() {
     const p = pipeline(mw1, mw2)
-    await p.execute({})
+    await expect(p.execute({})).resolves.toBeUndefined()
     expect(mw1).toHaveBeenCalledTimes(1)
     expect(mw2).toHaveBeenCalledTimes(1)
   })
@@ -52,7 +52,7 @@ describe('Pipeline', function() {
     const p = pipeline()
     p.use(mw1)
     p.use(mw2)
-    await p.execute({})
+    await expect(p.execute({})).resolves.toBeUndefined()
     expect(mw1).toHaveBeenCalledTimes(1)
     expect(mw2).toHaveBeenCalledTimes(1)
   })
@@ -60,20 +60,20 @@ describe('Pipeline', function() {
   it('should create a pipeline with middlewares, add middlewares with use and run them on execute', async function() {
     const p = pipeline(mw1)
     p.use(mw2)
-    await p.execute({})
+    await expect(p.execute({})).resolves.toBeUndefined()
     expect(mw1).toHaveBeenCalledTimes(1)
     expect(mw2).toHaveBeenCalledTimes(1)
   })
 
-  it('should reject with an error if error is thrown in middleware and there is no error handling',  function() {
+  it('should reject with an error if error is thrown in middleware and there is no error handling',  async function() {
     const p = pipeline(mw1, mwThrowError)
-    expect(p.execute({})).rejects.toEqual(e)
+    await expect(p.execute({})).rejects.toThrow(e)
   })
 
-  it('should resolve if error is thrown in middleware and there is error handling',  function() {
+  it('should resolve if error is thrown in middleware and there is error handling',  async function() {
     const p = pipeline(mw1, mwThrowError, mw2, mwErrorHandler)
     const msg = {}
-    expect(p.execute(msg)).resolves.toBeUndefined()
+    await expect(p.execute(msg)).rejects.toThrow(e)
     expect(mwErrorHandler).toHaveBeenCalled()
     expect(mw1).toHaveBeenCalled()
     expect(mw2).not.toHaveBeenCalled()
@@ -81,10 +81,10 @@ describe('Pipeline', function() {
     expect(mwErrorHandler.mock.calls[0][1]).toEqual(msg)
   })
 
-  it('should resolve if error is passed in next in middleware and there is error handling',  function() {
+  it('should resolve if error is passed in next in middleware and there is error handling',  async function() {
     const p = pipeline(mw1, mwError, mw2, mwErrorHandler)
     const msg = {}
-    expect(p.execute(msg)).resolves.toBeUndefined()
+    await expect(p.execute(msg)).rejects.toThrow(e)
     expect(mwErrorHandler).toHaveBeenCalled()
     expect(mw1).toHaveBeenCalled()
     expect(mw2).not.toHaveBeenCalled()
@@ -92,10 +92,10 @@ describe('Pipeline', function() {
     expect(mwErrorHandler.mock.calls[0][1]).toEqual(msg)
   })
 
-  it('should resolve if error is passed in next in middleware and there is error handling and not call third handler',  function() {
+  it('should resolve if error is passed in next in middleware and there is error handling and not call third handler',  async function() {
     const p = pipeline(mw1, mwError, mw2, mwErrorHandler, mwErrorHandler2, mwErrorHandler3)
     const msg = {}
-    expect(p.execute(msg)).resolves.toBeUndefined()
+    await expect(p.execute(msg)).resolves.toBeUndefined()
     expect(mwErrorHandler).toHaveBeenCalled()
     expect(mw1).toHaveBeenCalled()
     expect(mw2).not.toHaveBeenCalled()
