@@ -10,15 +10,18 @@ const {
 const DEFAULT_WAIT_TIME = 10
 const DEFAULT_BATCH_SIZE = 10
 
-const EMPTY_LOGGER = { log: nop, error: nop }
-
-function sqeasy(sqs) {
+function sqeasy({ sqs, logger }) {
   // Primitive way of confirming sqs exists and is the actual AWS SQS instance
   if (!sqs || !sqs.api || sqs.api.serviceId !== 'SQS') throw new Error('Sqeasy must be initialized with a valid AWS SQS instance')
 
+  // Validate logger supports required log method
+  if (logger) {
+    if (typeof logger.log !== 'function') throw new Error('Logger must have a log method')
+    if (typeof logger.error !== 'function') throw new Error('Logger must have an error method')
+  }
+
   const middlewares = pipeline()
   let running = false
-  let _logger = EMPTY_LOGGER
 
   const subscription = {
     queueUrl: null,
@@ -43,6 +46,19 @@ function sqeasy(sqs) {
     }
   }
 
+  function log(msg, ...args) {
+    if (logger) {
+      logger.log(formatLogMessage(msg), ...args)
+    }
+  }
+
+  function logErrorAndThrow(msg, e) {
+    if (logger) {
+      logger.error(formatLogMessage(msg), e)
+    }
+    throw e
+  }
+
   function use(...fns) {
     if (running) throw new Error('Cannot add middlewares while Sqeasy is running')
     if (!fns.every(isFunction)) throw new Error('use can only accept functions as arguments')
@@ -50,9 +66,9 @@ function sqeasy(sqs) {
   }
 
   function match(matcher, ...fns) {
+    if (running) throw new Error('Cannot add matchers while Sqeasy is running')
     if (!isFunction(matcher)) throw new Error('Matcher must be a function')
     if (!fns.every(isFunction)) throw new Error('matcher can only accept functions as arguments')
-    if (running) throw new Error('Cannot add matchers while Sqeasy is running')
     middlewares.use(async (msg, next) => {
       if (matcher(msg)) {
         const subMiddlewares = pipeline(...fns)
@@ -68,28 +84,39 @@ function sqeasy(sqs) {
       const { Messages } = await sqs.receiveMessage(subscription.toSQSParams()).promise()
       messages = Messages
     } catch (e) {
-      _logger.error('Failed to pull', e)
+      logErrorAndThrow('Failed to pull', e)
       subscription.timeoutHandler = setTimeout(fetchMessages, subscription.waitTimeMs)
       return
     }
     const haveMessages = !!(messages && messages.length)
     let startTime
     if (haveMessages) {
-      _logger.log(`Pull completed - ${messages.length} messages`)
-      if (subscription.batchSize > 1) {
-        startTime = Date.now()
-        await handleMessages(messages)
-      } else {
-        startTime = Date.now()
-        await handleMessage(...messages)
+      log(`Pull completed - ${messages.length} messages`)
+      startTime = Date.now()
+      const results = await Promise.allSettled(messages.map(handleMessage))
+      const rejected = results.find(function({ status }) { return status === 'rejected'})
+      if (rejected) {
+        throw rejected.reason
       }
     } else {
-      _logger.log('Pull completed - no messages')
+      log('Pull completed - no messages')
     }
     const passedDuration = Date.now() - startTime
     const nextPullIn = haveMessages ? Math.max(0, subscription.waitTimeMs - passedDuration) : subscription.waitTimeMs
-    _logger.log(`Next pull in ${(nextPullIn / 1000).toFixed(3)} seconds`)
+    log(`Next pull in ${(nextPullIn / 1000).toFixed(3)} seconds`)
     subscription.timeoutHandler = setTimeout(fetchMessages, nextPullIn)
+  }
+
+  async function handleMessage(message) {
+    const receiptHandle = message.ReceiptHandle
+    log(`Handling message ${message.MessageId}`)
+    await middlewares.execute(messageToContext(message))
+    try {
+      await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: receiptHandle }).promise()
+      log(`Deleted message ${message.MessageId}`)
+    } catch (e) {
+      logErrorAndThrow('Error deleting SQS message', e)
+    }
   }
 
   function pull({ queueUrl, batchSize = DEFAULT_BATCH_SIZE, waitTime = DEFAULT_WAIT_TIME, attributes = [], messageAttributes = [] }) {
@@ -110,7 +137,7 @@ function sqeasy(sqs) {
     subscription.attributes = attributes || []
     subscription.messageAttributes = messageAttributes || []
     running = true
-    _logger.log(`Start pulling ${queueUrl} with parameters: ${subscription.logParameters()}`)
+    log(`Start pulling ${queueUrl} with parameters: ${subscription.logParameters()}`)
     fetchMessages()
   }
 
@@ -120,57 +147,14 @@ function sqeasy(sqs) {
       subscription.timeoutHandler = null
     }
     running = false
-    _logger.log('Stopped pulling')
-  }
-
-  async function handleMessage(message) {
-    const receiptHandle = message.ReceiptHandle
-    _logger.log(`Handling message ${message.MessageId}`)
-    await middlewares.execute(messageToContext(message))
-    try {
-      await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: receiptHandle }).promise()
-      _logger.log(`Deleted message ${message.MessageId}`)
-    } catch (e) {
-      _logger.error('Error deleting SQS message', e)
-    }
-  }
-
-  function messageToEntry({ MessageId: Id , ReceiptHandle }) {
-    return { Id, ReceiptHandle }
-  }
-
-  async function handleMessages(messages) {
-    const entries = messages.map(messageToEntry)
-    const messagesIds = entries.map(({ Id }) => Id).join(', ')
-    _logger.log(`Handling messages ${messagesIds}`)
-    await Promise.all(messages.map(messageToContext).map(middlewares.execute))
-    try {
-      await sqs.deleteMessageBatch({ QueueUrl: subscription.queueUrl, Entries: entries }).promise()
-      _logger.log(`Deleted messages ${messagesIds}`)
-    } catch (e) {
-      _logger.error('Error deleting SQS message', e)
-    }
-  }
-
-  function setLogger(logger) {
-    if (!logger) {
-      _logger = EMPTY_LOGGER
-      return
-    }
-    if (typeof logger.log !== 'function') throw new Error('Logger must have a log method')
-    if (typeof logger.error !== 'function') throw new Error('Logger must have an error method')
-    _logger = {
-      log: function(msg, ...args) { return logger.log(formatLogMessage(msg), ...args) },
-      error: function(msg, ...args) { return logger.error(formatLogMessage(msg), ...args)}
-    }
+    log('Stopped pulling')
   }
 
   return {
     use,
     match,
     pull,
-    stop,
-    setLogger
+    stop
   }
 }
 
