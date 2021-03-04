@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "description": "AWS SQS made easy",
   "main": "src/sqeasy.js",
-  "repository": "git@github:ron-dadon/sqeasy.git",
+  "repository": "https://github.com/ron-dadon/sqeasy",
   "author": "Ron Dadon",
   "license": "MIT",
   "peerDependencies": {
