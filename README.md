@@ -1,6 +1,8 @@
 # sqeasy
 
 ![Unit Tests](https://github.com/ron-dadon/sqeasy/actions/workflows/main.yml/badge.svg)
+[![NPM](https://nodei.co/npm/sqeasy.png?mini=true)](https://npmjs.org/package/sqeasy)
+
 
 AWS SQS made easy, inspired by express middleware pattern.
 
