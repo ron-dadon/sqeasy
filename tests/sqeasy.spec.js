@@ -33,12 +33,12 @@ describe('sqeasy', function () {
   })
   it('should throw error if no valid sqs instance provided', function () {
     expect(function() {
-      sqeasy({ api: {} })
+      sqeasy({ sqs: { api: {} } })
     }).toThrow()
   })
   it('should create sqeasy app instance if valid sqs instance provided', function () {
     expect(function() {
-      sqeasy(sqs)
+      sqeasy({ sqs })
     }).not.toThrow()
   })
 })
