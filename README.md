@@ -158,9 +158,9 @@ Start pulling SQS queue according to the provided arguments.
 
 `waitTime`: The number of seconds to wait between pulls. This affects also the message invisibility time. Value must be greater than `0`. Default value `10`.
 
-`attributes`: The list of attributes to pull with each message. Must be an array with the attribute names. See AWS docs for possible values.
+`attributes`: The list of attributes to pull with each message. Must be an array with the attribute names. See [AWS docs](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html#API_ReceiveMessage_RequestParameters) under `AttributeName` for possible values.
 
-`messageAttributes`: The list of message attributes to pull with each message. Must be an array with the message attribute names. See AWS docs for possible values.
+`messageAttributes`: The list of message attributes to pull with each message. Must be an array with the message attribute names. [AWS docs](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html#API_ReceiveMessage_RequestParameters) under `MessageAttributeName` for possible values.
 
 #### stop
 
