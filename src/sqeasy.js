@@ -61,6 +61,7 @@ function sqeasy({ sqs, logger }) {
 
   function use(...fns) {
     if (running) throw new Error('Cannot add middlewares while Sqeasy is running')
+    if (!fns.length) throw new Error('use must be called with at least 1 middleware')
     if (!fns.every(isFunction)) throw new Error('use can only accept functions as arguments')
     middlewares.use(...fns)
   }
@@ -68,6 +69,8 @@ function sqeasy({ sqs, logger }) {
   function match(matcher, ...fns) {
     if (running) throw new Error('Cannot add matchers while Sqeasy is running')
     if (!isFunction(matcher)) throw new Error('Matcher must be a function')
+    if (matcher.length !== 1) throw new Error('Matcher function must take 1 argument')
+    if (!fns.length) throw new Error('matcher must have middlewares to run on match')
     if (!fns.every(isFunction)) throw new Error('matcher can only accept functions as arguments')
     middlewares.use(async (msg, next) => {
       if (matcher(msg)) {
@@ -85,8 +88,8 @@ function sqeasy({ sqs, logger }) {
       messages = Messages
     } catch (e) {
       logErrorAndThrow('Failed to pull', e)
-      subscription.timeoutHandler = setTimeout(fetchMessages, subscription.waitTimeMs)
-      return
+      // subscription.timeoutHandler = setTimeout(fetchMessages, subscription.waitTimeMs)
+      // return
     }
     const haveMessages = !!(messages && messages.length)
     let startTime
@@ -110,7 +113,7 @@ function sqeasy({ sqs, logger }) {
   async function handleMessage(message) {
     const receiptHandle = message.ReceiptHandle
     log(`Handling message ${message.MessageId}`)
-    await middlewares.execute(messageToContext(message))
+    await middlewares.execute(messageToContext(message), subscription.waitTimeMs)
     try {
       await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: receiptHandle }).promise()
       log(`Deleted message ${message.MessageId}`)
@@ -138,7 +141,7 @@ function sqeasy({ sqs, logger }) {
     subscription.messageAttributes = messageAttributes || []
     running = true
     log(`Start pulling ${queueUrl} with parameters: ${subscription.logParameters()}`)
-    fetchMessages()
+    return fetchMessages()
   }
 
   function stop() {

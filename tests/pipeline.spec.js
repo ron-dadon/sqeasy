@@ -1,4 +1,5 @@
 const pipeline = require('../src/pipeline.js')
+const { PipelineTimeoutError } = require('../src/pipeline.js')
 
 describe('Pipeline', function() {
   const e = new Error('error')
@@ -23,6 +24,9 @@ describe('Pipeline', function() {
   })
   const mwErrorHandler3 = jest.fn(function(err, msg, next) {
     next()
+  })
+  const mwTimeout = jest.fn(function(msg, next) {
+    setTimeout(next, 100)
   })
 
   beforeEach(function() {
@@ -103,5 +107,37 @@ describe('Pipeline', function() {
     expect(mwErrorHandler3).not.toHaveBeenCalled()
     expect(mwErrorHandler.mock.calls[0][0]).toEqual(e)
     expect(mwErrorHandler.mock.calls[0][1]).toEqual(msg)
+  })
+
+  it('should fail execution if timeout is not a valid integer',  async function() {
+    const p = pipeline(mw1)
+    const msg = {}
+    await expect(p.execute(msg, 'test')).rejects.toThrow('Pipeline execution timeout must be a valid integer')
+    expect(mw1).not.toHaveBeenCalled()
+  })
+
+  it('should fail execution if timeout is less than 1',  async function() {
+    const p = pipeline(mw1)
+    const msg = {}
+    await expect(p.execute(msg, 0)).rejects.toThrow('Pipeline execution timeout must be greater than 0')
+    expect(mw1).not.toHaveBeenCalled()
+  })
+
+  it('should fail execution if timeout reached',  async function() {
+    jest.useRealTimers()
+    const p = pipeline(mwTimeout, mw1)
+    const msg = {}
+    await expect(p.execute(msg, 10)).rejects.toThrow(PipelineTimeoutError)
+    expect(mwTimeout).toHaveBeenCalled()
+    expect(mw1).not.toHaveBeenCalled()
+  })
+
+  it('should not fail execution if timeout was not reached',  async function() {
+    jest.useRealTimers()
+    const p = pipeline(mwTimeout, mw1)
+    const msg = {}
+    await expect(p.execute(msg, 200)).resolves.toBeUndefined()
+    expect(mwTimeout).toHaveBeenCalled()
+    expect(mw1).toHaveBeenCalled()
   })
 })
