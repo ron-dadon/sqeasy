@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars,jest/no-done-callback */
 const sqeasy = require('../src/sqeasy.js')
 const { getSqsMock, getMockedPromise } = require('./sqs-mock.js')
 
@@ -128,7 +129,7 @@ describe('sqeasy', function () {
       }, 100)
     })
 
-    it('should fail on pull and throw error', function(done) {
+    it('should fail on pull and throw error', async function(done) {
       const mw = jest.fn(function({ message }, next) {
         next()
       })
@@ -138,7 +139,7 @@ describe('sqeasy', function () {
       })
 
       app.use(mw)
-      expect(app.pull({ queueUrl: 'TEST' })).rejects.toThrow()
+      await expect(app.pull({ queueUrl: 'TEST' })).rejects.toThrow()
       setTimeout(function() {
         expect(mw).not.toHaveBeenCalled()
         done()

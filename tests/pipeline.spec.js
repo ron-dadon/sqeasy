@@ -12,9 +12,9 @@ describe('Pipeline', function() {
   const mwError = jest.fn(function(msg, next) {
     next(e)
   })
+  // eslint-disable-next-line no-unused-vars
   const mwThrowError = jest.fn(function(msg, next) {
     throw e
-    next()
   })
   const mwErrorHandler = jest.fn(function(err, msg, next) {
     next(err)

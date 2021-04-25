@@ -14,7 +14,7 @@ function getSqsMock() {
 }
 
 function getMockedPromise(mockImplementation) {
-  return jest.fn(function(parameters) {
+  return jest.fn(function() {
     return {
       promise: jest.fn(mockImplementation)
     }

@@ -2,9 +2,7 @@ const pipeline = require('./pipeline.js')
 const {
   isFunction,
   secondsToMilliseconds,
-  formatLogMessage,
-  messageToContext,
-  nop
+  formatLogMessage
 } = require('./utils.js')
 
 const DEFAULT_WAIT_TIME = 10
@@ -28,15 +26,19 @@ function sqeasy({ sqs, logger }) {
     batchSize: DEFAULT_BATCH_SIZE,
     waitTime: DEFAULT_WAIT_TIME,
     waitTimeMs: secondsToMilliseconds(DEFAULT_WAIT_TIME),
+    visibilityTimeout: DEFAULT_WAIT_TIME,
+    visibilityTimeoutMs: secondsToMilliseconds(DEFAULT_WAIT_TIME),
+    executionTimeout: DEFAULT_WAIT_TIME,
+    executionTimeoutMs: secondsToMilliseconds(DEFAULT_WAIT_TIME),
     timeoutHandler: null,
     attributes: [],
     messageAttributes: [],
     logParameters: function() {
-      return `Batch Size: ${this.batchSize}, Wait Time: ${this.waitTime} seconds, Attributes: [${(this.attributes.length && this.attributes.join(', ')) || 'none'}], Message Attributes: [${(this.messageAttributes.length && this.messageAttributes.join(', ')) || 'none'}]`
+      return `Batch Size: ${this.batchSize}, Wait Time: ${this.waitTime} seconds, Visibility Timeout: ${this.visibilityTimeout} seconds, Attributes: [${(this.attributes.length && this.attributes.join(', ')) || 'none'}], Message Attributes: [${(this.messageAttributes.length && this.messageAttributes.join(', ')) || 'none'}]`
     },
     toSQSParams: function() {
       return {
-        VisibilityTimeout: this.waitTime,
+        VisibilityTimeout: this.visibilityTimeout,
         WaitTimeSeconds: this.waitTime,
         QueueUrl: this.queueUrl,
         MaxNumberOfMessages: this.batchSize,
@@ -113,7 +115,7 @@ function sqeasy({ sqs, logger }) {
   async function handleMessage(message) {
     const receiptHandle = message.ReceiptHandle
     log(`Handling message ${message.MessageId}`)
-    await middlewares.execute(messageToContext(message), subscription.waitTimeMs)
+    await middlewares.execute({ message, sqs }, subscription.executionTimeoutMs)
     try {
       await sqs.deleteMessage({ QueueUrl: subscription.queueUrl, ReceiptHandle: receiptHandle }).promise()
       log(`Deleted message ${message.MessageId}`)
@@ -122,21 +124,29 @@ function sqeasy({ sqs, logger }) {
     }
   }
 
-  function pull({ queueUrl, batchSize = DEFAULT_BATCH_SIZE, waitTime = DEFAULT_WAIT_TIME, attributes = [], messageAttributes = [] }) {
+  function pull({ queueUrl, batchSize = DEFAULT_BATCH_SIZE, waitTime = DEFAULT_WAIT_TIME, visibilityTimeout = DEFAULT_WAIT_TIME, executionTimeout = DEFAULT_WAIT_TIME, attributes = [], messageAttributes = [] }) {
     if (running) throw new Error('Must stop pulling before calling pull again')
     if (!queueUrl) throw new Error('Queue URL is required')
     if (!Number.isInteger(batchSize)) throw new Error('Batch size must be an integer')
     if (batchSize < 1 || batchSize > 10) throw new Error('Batch size must be between 1 and 10')
     if (!Number.isInteger(waitTime)) throw new Error('Wait time must be an integer')
+    if (!Number.isInteger(visibilityTimeout)) throw new Error('Visibility timeout must be an integer')
+    if (!Number.isInteger(executionTimeout)) throw new Error('Execution timeout must be an integer')
     if (!Array.isArray(attributes)) throw new Error('Attributes must be an array')
     if (!Array.isArray(messageAttributes)) throw new Error('Message attributes must be an array')
     if (waitTime < 0) throw new Error('Wait time most be 0 or higher')
+    if (visibilityTimeout < 0) throw new Error('Visibility timeout most be 0 or higher')
+    if (executionTimeout < 1) throw new Error('Execution timeout most be 1 or higher')
     if (attributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Attributes array can contain only strings')
     if (messageAttributes.some(function(value) { return typeof value !== 'string'})) throw new Error('Message attributes array can contain only strings')
     subscription.queueUrl = queueUrl
     subscription.batchSize = batchSize
     subscription.waitTime = waitTime
     subscription.waitTimeMs = secondsToMilliseconds(waitTime)
+    subscription.visibilityTimeout = visibilityTimeout
+    subscription.visibilityTimeoutMs = secondsToMilliseconds(visibilityTimeout)
+    subscription.executionTimeout = executionTimeout
+    subscription.executionTimeoutMs = secondsToMilliseconds(executionTimeout)
     subscription.attributes = attributes || []
     subscription.messageAttributes = messageAttributes || []
     running = true
